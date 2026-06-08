@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>RemoteDesk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Variables ───────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #0a0a0f;
+  --surface:  #111118;
+  --panel:    #18181f;
+  --border:   #2a2a38;
+  --accent:   #5b6af8;
+  --accent2:  #a78bfa;
+  --danger:   #f43f5e;
+  --success:  #22d3ee;
+  --text:     #e2e2f0;
+  --muted:    #666680;
+  --tap:      rgba(91,106,248,0.18);
+  --r:        14px;
+  --r-sm:     8px;
+  --shadow:   0 4px 24px rgba(0,0,0,0.5);
+}
+
+html, body {
+  height: 100%; width: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+
+/* ── Pantalla de conexión ────────────────────────────────── */
+#connect-screen {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 24px; padding: 32px;
+  background: var(--bg);
+  z-index: 100;
+  transition: opacity .4s, visibility .4s;
+}
+#connect-screen.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+.logo {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.logo-icon {
+  width: 72px; height: 72px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-radius: 20px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 36px;
+  box-shadow: 0 0 40px rgba(91,106,248,0.4);
+  animation: pulse 3s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,100% { box-shadow: 0 0 30px rgba(91,106,248,0.3); }
+  50%      { box-shadow: 0 0 60px rgba(91,106,248,0.6); }
+}
+.logo h1 {
+  font-size: 28px; font-weight: 800; letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #fff 40%, var(--accent2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.logo p { color: var(--muted); font-size: 13px; font-family: 'Space Mono', monospace; }
+
+.conn-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 24px;
+  width: 100%; max-width: 360px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.field label {
+  display: block; font-size: 11px; font-weight: 600;
+  letter-spacing: 1px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 6px;
+}
+.field input {
+  width: 100%; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  color: var(--text); font-family: 'Space Mono', monospace;
+  font-size: 15px; padding: 12px 14px;
+  outline: none; transition: border-color .2s;
+}
+.field input:focus { border-color: var(--accent); }
+.field input::placeholder { color: var(--muted); }
+
+.btn-connect {
+  width: 100%; padding: 14px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border: none; border-radius: var(--r-sm);
+  color: #fff; font-family: 'Syne', sans-serif;
+  font-size: 16px; font-weight: 700;
+  cursor: pointer; letter-spacing: 0.5px;
+  transition: opacity .2s, transform .15s;
+}
+.btn-connect:active { transform: scale(0.97); opacity: 0.85; }
+
+.conn-hint {
+  text-align: center; color: var(--muted);
+  font-size: 12px; font-family: 'Space Mono', monospace;
+  line-height: 1.6;
+}
+.conn-hint code {
+  color: var(--success);
+  background: rgba(34,211,238,0.08);
+  padding: 2px 6px; border-radius: 4px;
+}
+#conn-status {
+  text-align: center; font-size: 13px;
+  font-family: 'Space Mono', monospace;
+  min-height: 18px; transition: color .3s;
+}
+#conn-status.error  { color: var(--danger); }
+#conn-status.ok     { color: var(--success); }
+
+/* ── App principal ───────────────────────────────────────── */
+#app {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  opacity: 0; visibility: hidden;
+  transition: opacity .4s, visibility .4s;
+}
+#app.visible { opacity: 1; visibility: visible; }
+
+/* ── Header ─────────────────────────────────────────────── */
+#header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0; z-index: 10;
+}
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 8px var(--success);
+  animation: blink 2s ease-in-out infinite;
+}
+@keyframes blink {
+  0%,100% { opacity: 1; } 50% { opacity: 0.3; }
+}
+#header h2 {
+  font-size: 15px; font-weight: 700; flex: 1;
+  letter-spacing: -0.3px;
+}
+#header .conn-ip {
+  font-size: 10px; font-family: 'Space Mono', monospace;
+  color: var(--muted);
+}
+.icon-btn {
+  width: 34px; height: 34px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--panel);
+  color: var(--text); font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background .15s, transform .1s;
+  flex-shrink: 0;
+}
+.icon-btn:active { background: var(--tap); transform: scale(0.9); }
+
+/* ── Tabs ────────────────────────────────────────────────── */
+#tabs {
+  display: flex;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tab {
+  flex: 1; padding: 10px 0;
+  text-align: center; font-size: 11px;
+  font-weight: 700; letter-spacing: 0.5px;
+  color: var(--muted); cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color .2s, border-color .2s;
+  text-transform: uppercase;
+}
+.tab.active { color: var(--accent); border-color: var(--accent); }
+
+/* ── Panel container ─────────────────────────────────────── */
+#panels { flex: 1; overflow: hidden; position: relative; }
+.panel {
+  position: absolute; inset: 0;
+  display: none; flex-direction: column;
+  overflow: hidden;
+}
+.panel.active { display: flex; }
+
+/* ── TOUCHPAD ────────────────────────────────────────────── */
+#touchpad-area {
+  flex: 1;
+  background:
+    radial-gradient(ellipse at 30% 30%, rgba(91,106,248,0.04) 0%, transparent 60%),
+    var(--panel);
+  position: relative; overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+#touchpad-area::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(91,106,248,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(91,106,248,0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+#touchpad-hint {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 8px; pointer-events: none;
+}
+#touchpad-hint .hint-icon { font-size: 36px; opacity: 0.12; }
+#touchpad-hint p { font-size: 12px; color: var(--muted); opacity: 0.6; }
+#ripple-container { position: absolute; inset: 0; pointer-events: none; }
+
+.touchpad-buttons {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 1px; background: var(--border);
+  flex-shrink: 0; height: 56px;
+}
+.tp-btn {
+  background: var(--surface); color: var(--text);
+  border: none; font-family: 'Syne', sans-serif;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: background .15s;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.tp-btn:active { background: var(--tap); }
+.tp-btn.right   { color: var(--muted); }
+
+.scroll-bar {
+  position: absolute; right: 0; top: 0; bottom: 56px;
+  width: 36px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+  background: rgba(0,0,0,0.2);
+  border-left: 1px solid var(--border);
+}
+.scroll-btn {
+  width: 28px; height: 28px; border-radius: 8px;
+  background: var(--panel); border: 1px solid var(--border);
+  color: var(--text); font-size: 14px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.scroll-btn:active { background: var(--accent); }
+
+/* ── KEYBOARD ────────────────────────────────────────────── */
+#keyboard-panel {
+  padding: 12px;
+  background: var(--bg);
+  overflow-y: auto;
+  gap: 10px;
+}
+.text-input-row {
+  display: flex; gap: 8px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 8px;
+}
+#type-input {
+  flex: 1; background: transparent; border: none;
+  color: var(--text); font-family: 'Space Mono', monospace;
+  font-size: 14px; outline: none;
+}
+#type-input::placeholder { color: var(--muted); }
+#type-send {
+  background: var(--accent); border: none; border-radius: 6px;
+  color: #fff; padding: 6px 14px;
+  font-family: 'Syne', sans-serif; font-weight: 700;
+  cursor: pointer; font-size: 13px;
+}
+#type-send:active { opacity: 0.8; }
+
+.kb-section { margin-top: 4px; }
+.kb-section-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--muted);
+  margin-bottom: 8px; padding-left: 2px;
+}
+.kb-row {
+  display: flex; gap: 6px; margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.key {
+  flex: 1; min-width: 44px; height: 44px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--r-sm); color: var(--text);
+  font-family: 'Space Mono', monospace;
+  font-size: 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .1s, transform .1s, border-color .1s;
+  white-space: nowrap; padding: 0 6px;
+  -webkit-user-select: none; user-select: none;
+}
+.key:active { background: var(--accent); border-color: var(--accent); transform: scale(0.93); }
+.key.wide   { flex: 2; }
+.key.wider  { flex: 3; }
+.key.mod    { background: var(--surface); color: var(--accent); border-color: rgba(91,106,248,0.4); }
+.key.danger { color: var(--danger); }
+
+.shortcut-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 6px; margin-top: 6px;
+}
+.shortcut {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 10px 8px;
+  text-align: center; cursor: pointer;
+  font-size: 11px; font-weight: 600;
+  color: var(--muted); transition: all .15s;
+}
+.shortcut span { display: block; font-size: 18px; margin-bottom: 4px; }
+.shortcut:active { background: var(--tap); color: var(--text); border-color: var(--accent); }
+
+/* ── SCREEN ──────────────────────────────────────────────── */
+#screen-panel {
+  background: #000; align-items: center; justify-content: center;
+}
+#screen-container {
+  width: 100%; height: 100%; overflow: hidden;
+  position: relative; display: flex; align-items: center; justify-content: center;
+}
+#screen-img {
+  max-width: 100%; max-height: 100%;
+  object-fit: contain; display: block;
+  image-rendering: auto;
+}
+#screen-overlay {
+  position: absolute; inset: 0;
+}
+#screen-controls {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  display: flex; gap: 8px; padding: 10px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.8));
+}
+.stream-btn {
+  flex: 1; padding: 10px;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: rgba(17,17,24,0.8); color: var(--text);
+  font-family: 'Syne', sans-serif; font-weight: 600; font-size: 13px;
+  cursor: pointer; transition: all .15s;
+  backdrop-filter: blur(8px);
+}
+.stream-btn:active { background: var(--tap); }
+.stream-btn.primary { background: var(--accent); border-color: var(--accent); }
+.stream-btn.primary:active { opacity: 0.8; }
+#screen-fps { font-size: 10px; color: var(--muted); font-family: 'Space Mono', monospace; }
+#screen-placeholder {
+  text-align: center; color: var(--muted);
+  display: flex; flex-direction: column; gap: 12px;
+  align-items: center;
+}
+#screen-placeholder .big-icon { font-size: 52px; opacity: 0.2; }
+#screen-placeholder p { font-size: 13px; }
+
+/* ── Ripple ──────────────────────────────────────────────── */
+@keyframes ripple-out {
+  0%   { transform: translate(-50%,-50%) scale(0); opacity: 0.6; }
+  100% { transform: translate(-50%,-50%) scale(4); opacity: 0; }
+}
+.ripple {
+  position: absolute; width: 50px; height: 50px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+  animation: ripple-out .5s ease-out forwards;
+  pointer-events: none;
+}
+
+/* ── Toast ───────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 80px; left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 20px; padding: 8px 18px;
+  font-size: 12px; font-family: 'Space Mono', monospace;
+  color: var(--text); opacity: 0; transition: all .3s;
+  white-space: nowrap; z-index: 999; pointer-events: none;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ── PANTALLA DE CONEXIÓN ─────────────────────────────────── -->
+<div id="connect-screen">
+  <div class="logo">
+    <div class="logo-icon">🖥️</div>
+    <h1>RemoteDesk</h1>
+    <p>control remoto de escritorio</p>
+  </div>
+
+  <div class="conn-card">
+    <div class="field">
+      <label>IP del servidor</label>
+      <input type="text" id="ip-input" placeholder="192.168.x.x" inputmode="decimal">
+    </div>
+    <div class="field">
+      <label>Puerto</label>
+      <input type="number" id="port-input" value="8765" inputmode="numeric">
+    </div>
+    <button class="btn-connect" onclick="connect()">Conectar</button>
+    <div id="conn-status"></div>
+  </div>
+
+  <div class="conn-hint">
+    Ejecuta <code>python server.py</code> en tu PC.<br>
+    La IP aparece en la terminal al iniciar.
+  </div>
+</div>
+
+<!-- ── APP PRINCIPAL ────────────────────────────────────────── -->
+<div id="app">
+  <div id="header">
+    <div class="status-dot" id="status-dot"></div>
+    <h2>RemoteDesk</h2>
+    <span class="conn-ip" id="header-ip"></span>
+    <button class="icon-btn" onclick="disconnect()" title="Desconectar">✕</button>
+  </div>
+
+  <div id="tabs">
+    <div class="tab active" onclick="switchTab('touchpad')">🖱 Touchpad</div>
+    <div class="tab" onclick="switchTab('keyboard')">⌨️ Teclado</div>
+    <div class="tab" onclick="switchTab('screen')">🖥 Pantalla</div>
+  </div>
+
+  <div id="panels">
+
+    <!-- TOUCHPAD -->
+    <div class="panel active" id="panel-touchpad">
+      <div id="touchpad-area">
+        <div id="touchpad-hint">
+          <div class="hint-icon">👆</div>
+          <p>Desliza para mover · Toca dos veces para clic</p>
+        </div>
+        <div id="ripple-container"></div>
+        <div class="scroll-bar">
+          <div class="scroll-btn" onpointerdown="startScroll(-1)" onpointerup="stopScroll()">▲</div>
+          <div style="font-size:9px;color:var(--muted);letter-spacing:1px;writing-mode:vertical-lr;text-orientation:mixed">SCROLL</div>
+          <div class="scroll-btn" onpointerdown="startScroll(1)" onpointerup="stopScroll()">▼</div>
+        </div>
+      </div>
+      <div class="touchpad-buttons">
+        <button class="tp-btn" ontouchstart="clickMouse('left')">👆 Clic izq.</button>
+        <button class="tp-btn right" ontouchstart="clickMouse('right')">👆 Clic der.</button>
+      </div>
+    </div>
+
+    <!-- KEYBOARD -->
+    <div class="panel" id="panel-keyboard">
+      <div id="keyboard-panel">
+        <div class="text-input-row">
+          <input type="text" id="type-input" placeholder="Escribe texto aquí...">
+          <button id="type-send" onclick="sendText()">Enviar</button>
+        </div>
+
+        <div class="kb-section">
+          <div class="kb-section-label">Teclas especiales</div>
+          <div class="kb-row">
+            <div class="key mod" onclick="sendKey('Escape')">Esc</div>
+            <div class="key mod" onclick="sendKey('Tab')">Tab ⇥</div>
+            <div class="key mod wide" onclick="sendKey('CapsLock')">Caps ⇪</div>
+            <div class="key mod danger wide" onclick="sendKey('Backspace')">⌫ Del</div>
+          </div>
+          <div class="kb-row">
+            <div class="key mod wider" onclick="sendKey('Space')">Espacio</div>
+            <div class="key mod" onclick="sendKey('Enter')">↵ Enter</div>
+            <div class="key mod" onclick="sendKey('Delete')">Del</div>
+          </div>
+        </div>
+
+        <div class="kb-section">
+          <div class="kb-section-label">Navegación</div>
+          <div class="kb-row">
+            <div class="key" onclick="sendKey('Home')">Home</div>
+            <div class="key" onclick="sendKey('End')">End</div>
+            <div class="key" onclick="sendKey('PageUp')">Pág ↑</div>
+            <div class="key" onclick="sendKey('PageDown')">Pág ↓</div>
+          </div>
+          <div class="kb-row" style="justify-content:center; gap:6px;">
+            <div class="key" style="max-width:54px" onclick="sendKey('ArrowLeft')">◀</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div class="key" style="min-width:54px;max-width:54px" onclick="sendKey('ArrowUp')">▲</div>
+              <div class="key" style="min-width:54px;max-width:54px" onclick="sendKey('ArrowDown')">▼</div>
+            </div>
+            <div class="key" style="max-width:54px" onclick="sendKey('ArrowRight')">▶</div>
+          </div>
+        </div>
+
+        <div class="kb-section">
+          <div class="kb-section-label">Atajos rápidos</div>
+          <div class="shortcut-grid">
+            <div class="shortcut" onclick="combo(['Control','c'])"><span>📋</span>Copiar</div>
+            <div class="shortcut" onclick="combo(['Control','v'])"><span>📌</span>Pegar</div>
+            <div class="shortcut" onclick="combo(['Control','x'])"><span>✂️</span>Cortar</div>
+            <div class="shortcut" onclick="combo(['Control','z'])"><span>↩️</span>Deshacer</div>
+            <div class="shortcut" onclick="combo(['Control','a'])"><span>☑️</span>Selec. todo</div>
+            <div class="shortcut" onclick="combo(['Control','s'])"><span>💾</span>Guardar</div>
+            <div class="shortcut" onclick="combo(['Alt','Tab'])"><span>🔀</span>Alt+Tab</div>
+            <div class="shortcut" onclick="combo(['Control','w'])"><span>❌</span>Cerrar tab</div>
+            <div class="shortcut" onclick="combo(['Meta','d'])"><span>🏠</span>Escritorio</div>
+            <div class="shortcut" onclick="combo(['Control','l'])"><span>🔗</span>Barra URL</div>
+            <div class="shortcut" onclick="combo(['Control','t'])"><span>➕</span>Nueva tab</div>
+            <div class="shortcut" onclick="combo(['Control','f'])"><span>🔍</span>Buscar</div>
+          </div>
+        </div>
+
+        <div class="kb-section">
+          <div class="kb-section-label">Teclas de función</div>
+          <div class="kb-row">
+            <div class="key" onclick="sendKey('F1')">F1</div>
+            <div class="key" onclick="sendKey('F2')">F2</div>
+            <div class="key" onclick="sendKey('F3')">F3</div>
+            <div class="key" onclick="sendKey('F4')">F4</div>
+          </div>
+          <div class="kb-row">
+            <div class="key" onclick="sendKey('F5')">F5</div>
+            <div class="key" onclick="sendKey('F6')">F6</div>
+            <div class="key" onclick="sendKey('F7')">F7</div>
+            <div class="key" onclick="sendKey('F8')">F8</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCREEN -->
+    <div class="panel" id="panel-screen">
+      <div id="screen-container">
+        <div id="screen-placeholder">
+          <div class="big-icon">📺</div>
+          <p>Pulsa "Iniciar stream" para ver<br>la pantalla de tu PC</p>
+        </div>
+        <img id="screen-img" style="display:none" alt="pantalla remota">
+        <div id="screen-overlay"></div>
+        <div id="screen-controls">
+          <div style="flex:1">
+            <div id="screen-fps">— fps</div>
+          </div>
+          <button class="stream-btn" onclick="takeSnapshot()">📸 Foto</button>
+          <button class="stream-btn primary" id="stream-toggle-btn" onclick="toggleStream()">▶ Iniciar</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ── Estado global ─────────────────────────────────────────── */
+let ws = null;
+let serverW = 1920, serverH = 1080;
+let streaming = false;
+let frameCount = 0, lastFpsTime = 0;
+let scrollInterval = null;
+let activeModifiers = new Set();
+
+/* ── Conexión WebSocket ────────────────────────────────────── */
+function connect() {
+  const ip   = document.getElementById('ip-input').value.trim();
+  const port = document.getElementById('port-input').value.trim();
+  if (!ip) { setConnStatus('Ingresa la IP del servidor', 'error'); return; }
+
+  const url = `ws://${ip}:${port}`;
+  setConnStatus('Conectando…');
+
+  try { ws = new WebSocket(url); } catch(e) {
+    setConnStatus('URL inválida', 'error'); return;
+  }
+
+  ws.onopen = () => {
+    setConnStatus('Conectado ✓', 'ok');
+    send({ cmd: 'get_info' });
+    setTimeout(showApp, 600);
+  };
+
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    if (data.type === 'frame') {
+      handleFrame(data.data);
+    } else if (data.ip) {
+      serverW = data.screenW || serverW;
+      serverH = data.screenH || serverH;
+    }
+  };
+
+  ws.onclose = () => {
+    if (document.getElementById('app').classList.contains('visible')) {
+      showToast('Conexión perdida');
+      showConnect();
+    }
+    streaming = false;
+  };
+
+  ws.onerror = () => {
+    setConnStatus('No se pudo conectar. ¿Está el servidor activo?', 'error');
+    ws = null;
+  };
+}
+
+function disconnect() {
+  if (ws) { ws.close(); ws = null; }
+  streaming = false;
+  showConnect();
+}
+
+function send(obj) {
+  if (ws && ws.readyState === WebSocket.OPEN)
+    ws.send(JSON.stringify(obj));
+}
+
+/* ── UI ────────────────────────────────────────────────────── */
+function setConnStatus(msg, cls = '') {
+  const el = document.getElementById('conn-status');
+  el.textContent = msg;
+  el.className = cls;
+}
+
+function showApp() {
+  document.getElementById('connect-screen').classList.add('hidden');
+  const app = document.getElementById('app');
+  app.classList.add('visible');
+  const ip = document.getElementById('ip-input').value.trim();
+  document.getElementById('header-ip').textContent = ip;
+}
+
+function showConnect() {
+  document.getElementById('connect-screen').classList.remove('hidden');
+  document.getElementById('app').classList.remove('visible');
+  setConnStatus('');
+  document.getElementById('screen-img').style.display = 'none';
+  document.getElementById('screen-placeholder').style.display = 'flex';
+  document.getElementById('stream-toggle-btn').textContent = '▶ Iniciar';
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const names = ['touchpad','keyboard','screen'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`panel-${name}`).classList.add('active');
+}
+
+function showToast(msg, duration = 2000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+/* ── TOUCHPAD ──────────────────────────────────────────────── */
+const touchpad = document.getElementById('touchpad-area');
+let lastTouch = null;
+let tapTimer = null;
+let twoFinger = false;
+
+touchpad.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    lastTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+
+    tapTimer = setTimeout(() => { tapTimer = null; }, 300);
+    twoFinger = false;
+  } else if (e.touches.length === 2) {
+    twoFinger = true;
+    lastTouch = {
+      x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+      y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+    };
+  }
+}, { passive: false });
+
+touchpad.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (!lastTouch) return;
+
+  let cx, cy;
+  if (e.touches.length === 2) {
+    cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+  } else {
+    cx = e.touches[0].clientX;
+    cy = e.touches[0].clientY;
+  }
+
+  const dx = (cx - lastTouch.x) * 2.5;
+  const dy = (cy - lastTouch.y) * 2.5;
+
+  if (twoFinger || e.touches.length === 2) {
+    send({ cmd: 'mouse_scroll', dx: 0, dy: -Math.round(dy / 10) });
+  } else {
+    send({ cmd: 'mouse_move_rel', dx: Math.round(dx), dy: Math.round(dy) });
+  }
+
+  lastTouch = { x: cx, y: cy };
+}, { passive: false });
+
+touchpad.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  if (tapTimer !== null && !twoFinger) {
+    // doble toque → doble clic
+    clearTimeout(tapTimer);
+    tapTimer = null;
+    send({ cmd: 'mouse_click', button: 'left', count: 2 });
+    spawnRipple(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+  } else if (tapTimer !== null) {
+    clearTimeout(tapTimer);
+    tapTimer = null;
+    spawnRipple(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+  }
+  lastTouch = null;
+}, { passive: false });
+
+function clickMouse(btn) {
+  send({ cmd: 'mouse_click', button: btn, count: 1 });
+  showToast(btn === 'left' ? 'Clic izquierdo' : 'Clic derecho', 900);
+}
+
+function startScroll(dir) {
+  stopScroll();
+  scrollInterval = setInterval(() => send({ cmd: 'mouse_scroll', dx: 0, dy: dir * 3 }), 80);
+}
+function stopScroll() {
+  if (scrollInterval) { clearInterval(scrollInterval); scrollInterval = null; }
+}
+
+function spawnRipple(x, y) {
+  const c = document.getElementById('ripple-container');
+  const r = document.createElement('div');
+  r.className = 'ripple';
+  r.style.left = x + 'px';
+  r.style.top  = y + 'px';
+  c.appendChild(r);
+  setTimeout(() => r.remove(), 600);
+}
+
+/* ── TECLADO ───────────────────────────────────────────────── */
+function sendKey(key) {
+  send({ cmd: 'key_press', key });
+  showToast(key, 700);
+}
+
+function sendText() {
+  const input = document.getElementById('type-input');
+  const text  = input.value;
+  if (!text) return;
+  send({ cmd: 'type_text', text });
+  input.value = '';
+  showToast('Texto enviado ✓', 900);
+}
+
+document.getElementById('type-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') sendText();
+});
+
+async function combo(keys) {
+  for (const k of keys)       send({ cmd: 'key_down', key: k });
+  await new Promise(r => setTimeout(r, 50));
+  for (const k of [...keys].reverse()) send({ cmd: 'key_up', key: k });
+  showToast(keys.join('+'), 900);
+}
+
+/* ── STREAM ────────────────────────────────────────────────── */
+function handleFrame(b64) {
+  const img = document.getElementById('screen-img');
+  img.src = 'data:image/jpeg;base64,' + b64;
+  if (img.style.display === 'none') {
+    img.style.display = 'block';
+    document.getElementById('screen-placeholder').style.display = 'none';
+  }
+  frameCount++;
+  const now = Date.now();
+  if (now - lastFpsTime >= 1000) {
+    document.getElementById('screen-fps').textContent = `${frameCount} fps`;
+    frameCount = 0; lastFpsTime = now;
+  }
+}
+
+function toggleStream() {
+  if (!streaming) {
+    send({ cmd: 'start_stream', fps: 10, quality: 40, scale: 0.5 });
+    streaming = true;
+    document.getElementById('stream-toggle-btn').textContent = '⏹ Detener';
+    showToast('Stream iniciado');
+  } else {
+    send({ cmd: 'stop_stream' });
+    streaming = false;
+    document.getElementById('stream-toggle-btn').textContent = '▶ Iniciar';
+    showToast('Stream detenido');
+  }
+}
+
+function takeSnapshot() {
+  send({ cmd: 'snapshot', quality: 60, scale: 0.7 });
+  showToast('Capturando…', 1000);
+}
+</script>
+</body>
+</html>
